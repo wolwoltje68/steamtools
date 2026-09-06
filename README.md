@@ -129,7 +129,7 @@ long-lived refresh token.
 ## Development
 
 ```bash
-npm test                              # 77 tests
+npm test                              # 80 tests
 npx eslint src App.js index.js
 npx expo export --platform android    # verify the bundle builds
 ```
