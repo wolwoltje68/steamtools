@@ -126,12 +126,66 @@ long-lived refresh token.
 
 ---
 
+## Screenshots
+
+![Every screen](screenshots/00-overview.png)
+
+These are captured from the running app by `npm run ui-smoke`, not drawn by
+hand. The account shown is a throwaway with randomly generated secrets, talking
+to a fake Steam.
+
+---
+
+## Testing across operating systems
+
+| Command | What it does | Where it runs |
+|---|---|---|
+| `npm test` | 80 unit + integration tests | any OS |
+| `npm run lint` | ESLint over app and scripts | any OS |
+| `npm run verify:platforms` | bundles for Android, iOS and web and checks each output | any OS |
+| `npm run ui-smoke` | drives every screen in a browser against a fake Steam, saves screenshots | any OS with Chromium |
+| `npm run verify:all` | all of the above | any OS |
+| `npm run device android` | builds and launches on an emulator or USB device | any OS with the Android SDK |
+| `npm run device ios` | builds and launches on a simulator or device | macOS only |
+| `npm run device expo-go` | QR code, runs on any phone | any OS, no toolchain |
+
+**Bundling for every platform works on every OS** — Metro is pure JavaScript, so
+a Linux machine can verify the iOS bundle. Only producing an *installable
+binary* needs the platform's toolchain: Xcode for iOS (macOS only), the Android
+SDK for Android. `npm run device ios` says so explicitly rather than failing
+somewhere deep in a native build, and points at EAS Build for iOS without a Mac.
+
+### What the UI smoke test actually does
+
+`scripts/ui-smoke.mjs` builds the app for web (react-native-web), serves it,
+and drives it in headless Chromium while `scripts/steam-mock.mjs` answers every
+Steam request. The same component, navigation and state code runs there as on a
+phone, so it catches render crashes, dead buttons and broken navigation without
+a device — and it asserts behaviour, not just that pages load:
+
+- the password arrives at Steam RSA-encrypted, decrypted back with the mock's
+  private key to prove it
+- the Guard code rendered is a real five-character TOTP
+- the inventory action bar sits inside the viewport and clears the tab bar
+- cards actually paint their surface colour
+- nothing is logged to the console as an error
+
+Web is a **testing and preview target, not a shipping one**: `expo-secure-store`
+has no web implementation, so "remember on this device" is inert there.
+
+`.github/workflows/ci.yml` runs the unit suite on Ubuntu, macOS and Windows,
+bundles all three platforms, runs the UI smoke test and uploads its screenshots,
+and compiles native debug builds for Android (Ubuntu) and iOS (macOS).
+
+---
+
 ## Development
 
 ```bash
 npm test                              # 80 tests
-npx eslint src App.js index.js
-npx expo export --platform android    # verify the bundle builds
+npm run lint
+npm run verify:platforms              # android + ios + web bundles
+npm run ui-smoke                      # screens + screenshots
 ```
 
 The suite runs against a mocked `fetch`, so it exercises real request
@@ -154,6 +208,8 @@ src/storage/   encrypted vault
 src/state/     app context, automation engine
 src/ui/        theme and shared components
 src/screens/   the screens
+scripts/       ui-smoke, steam-mock, verify-platforms, run-device
+tests/         unit and integration tests
 ```
 
 ---

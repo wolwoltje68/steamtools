@@ -11,16 +11,25 @@
       "resizeMode": "contain",
       "backgroundColor": "#0e141b"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.steamtools.app"
     },
     "android": {
       "package": "com.steamtools.app",
-      "adaptiveIcon": { "backgroundColor": "#0e141b" }
+      "adaptiveIcon": {
+        "backgroundColor": "#0e141b"
+      }
     },
-    "plugins": ["expo-secure-store"],
-    "extra": {}
+    "plugins": [
+      "expo-secure-store"
+    ],
+    "extra": {},
+    "web": {
+      "bundler": "metro"
+    }
   }
 }

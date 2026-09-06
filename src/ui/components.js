@@ -16,9 +16,13 @@ import { colors, radius, spacing, typography } from './theme.js';
 
 export function Screen({ children, scroll = false, refreshControl, contentStyle }) {
   const Inner = scroll ? ScrollView : View;
+  // A ScrollView's content container wants flexGrow so short content still
+  // fills the screen; a plain View wants flex:1 so it is *constrained* to the
+  // screen. Sharing one style let the View grow past the viewport, which pushed
+  // absolutely-positioned children (the inventory action bar) off the bottom.
   const innerProps = scroll
     ? { contentContainerStyle: [styles.screenContent, contentStyle], refreshControl, keyboardShouldPersistTaps: 'handled' }
-    : { style: [styles.screenContent, contentStyle] };
+    : { style: [styles.screenView, contentStyle] };
   return (
     <SafeAreaView style={styles.screen} edges={['left', 'right']}>
       <Inner {...innerProps}>{children}</Inner>
@@ -27,15 +31,16 @@ export function Screen({ children, scroll = false, refreshControl, contentStyle 
 }
 
 export function Card({ children, style, onPress }) {
-  const Container = onPress ? Pressable : View;
-  return (
-    <Container
-      style={({ pressed } = {}) => [styles.card, style, pressed && styles.pressed]}
-      onPress={onPress}
-    >
-      {children}
-    </Container>
-  );
+  // Only Pressable resolves a function style. Handing one to a View makes it
+  // silently render unstyled, so the two cases are kept apart.
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} style={({ pressed }) => [styles.card, style, pressed && styles.pressed]}>
+        {children}
+      </Pressable>
+    );
+  }
+  return <View style={[styles.card, style]}>{children}</View>;
 }
 
 export function SectionHeader({ title, action, onAction }) {
@@ -189,6 +194,7 @@ export function Divider() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   screenContent: { padding: spacing.lg, paddingBottom: spacing.xxl, flexGrow: 1 },
+  screenView: { flex: 1, padding: spacing.lg, paddingBottom: spacing.xxl },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,

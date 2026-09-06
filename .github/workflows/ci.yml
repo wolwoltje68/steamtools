@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  # The pure-JS layers behave identically everywhere, but path handling and
+  # shell differences do not -- so the unit suite runs on all three host OSes.
+  unit:
+    name: Unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+
+  # Metro resolves platform-specific modules per target, so each bundle is
+  # built and checked. All three build on Linux; no device is needed.
+  bundles:
+    name: Platform bundles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: node scripts/verify-platforms.mjs
+
+  # Drives the real screens in a browser against a fake Steam and uploads the
+  # screenshots, so UI regressions are visible in the run's artifacts.
+  ui:
+    name: UI smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run ui-smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: screenshots/
+
+  # An installable iOS app needs Xcode, which only exists on macOS. This is the
+  # one job that genuinely cannot run on Linux.
+  ios-build:
+    name: iOS native build
+    runs-on: macos-latest
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Generate the native iOS project
+        run: npx expo prebuild --platform ios --no-install
+      - name: Compile for the simulator
+        run: |
+          xcodebuild -workspace ios/*.xcworkspace \
+            -scheme SteamTools \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO | tail -40
+
+  android-build:
+    name: Android native build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - name: Generate the native Android project
+        run: npx expo prebuild --platform android --no-install
+      - name: Assemble a debug APK
+        run: cd android && ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-debug.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
