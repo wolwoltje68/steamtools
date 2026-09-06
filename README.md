@@ -129,14 +129,21 @@ long-lived refresh token.
 ## Development
 
 ```bash
-npm test                              # 40 tests
+npm test                              # 77 tests
 npx eslint src App.js index.js
 npx expo export --platform android    # verify the bundle builds
 ```
 
-The crypto primitives are verified against Node's OpenSSL bindings — including
-decrypting the RSA output with a real private key — and Guard codes against an
-independently transcribed reference implementation across 500 time slots.
+The suite runs against a mocked `fetch`, so it exercises real request
+construction and response parsing without touching Steam:
+
+- Crypto verified against Node's OpenSSL bindings, including decrypting the RSA
+  output with a real private key.
+- Guard codes checked against an independently transcribed reference across 500
+  time slots.
+- Login asserts the password reaches Steam RSA-encrypted and never in the clear.
+- Automation asserts it never gives items away unprompted and never
+  auto-approves phone-number, account-recovery or API-key confirmations.
 
 ### Layout
 
