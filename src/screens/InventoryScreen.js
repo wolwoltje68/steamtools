@@ -38,7 +38,9 @@ export default function InventoryScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [activeAccount, app.appid, app.contextid, ensureSession]);
+    // Keyed on the id: see the note in TradesScreen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAccount?.id, app.appid, app.contextid, ensureSession]);
 
   useEffect(() => {
     load();

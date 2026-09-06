@@ -34,6 +34,13 @@ export function AppProvider({ children }) {
   // without being torn down and rebuilt on every state change.
   const accountsRef = useRef(accounts);
   accountsRef.current = accounts;
+  // Settings go through a ref too. If `persist` closed over `settings`, every
+  // settings change would produce a new persist -> updateAccounts ->
+  // ensureSession identity, tearing down and rebuilding the automation engine
+  // without the start effect below ever re-running, which stops automation
+  // silently.
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const engineRef = useRef(null);
   const backgroundedAt = useRef(null);
 
@@ -46,9 +53,9 @@ export function AppProvider({ children }) {
   const persist = useCallback(async (nextAccounts, nextSettings) => {
     await vault.save({
       accounts: nextAccounts ?? accountsRef.current,
-      settings: nextSettings ?? settings,
+      settings: nextSettings ?? settingsRef.current,
     });
-  }, [settings]);
+  }, []);
 
   const updateAccounts = useCallback(
     async (updater) => {
@@ -253,28 +260,33 @@ export function AppProvider({ children }) {
 
   const updateSettings = useCallback(
     async (patch) => {
-      const next = { ...settings, ...patch };
+      const next = { ...settingsRef.current, ...patch };
+      settingsRef.current = next;
       setSettings(next);
       await persist(undefined, next);
       return next;
     },
-    [settings, persist]
+    [persist]
   );
 
   // --- automation --------------------------------------------------------
 
+  // The engine reaches the current callbacks through a ref so it is constructed
+  // once and never torn down mid-run by an unrelated re-render.
+  const engineHooks = useRef(null);
+  engineHooks.current = { ensureSession, appendLog, notificationsEnabled: settings.notificationsEnabled };
+
   useEffect(() => {
     engineRef.current = new AutomationEngine({
       getAccounts: () => accountsRef.current,
-      ensureSession,
-      onLog: appendLog,
+      ensureSession: (account) => engineHooks.current.ensureSession(account),
+      onLog: (entry) => engineHooks.current.appendLog(entry),
       onNotify: (title, body) => {
-        if (settings.notificationsEnabled) notify(title, body);
+        if (engineHooks.current.notificationsEnabled) notify(title, body);
       },
     });
     return () => engineRef.current?.stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ensureSession, appendLog]);
+  }, []);
 
   const anyAutomationEnabled = useMemo(
     () => accounts.some((account) => account.automation?.enabled),

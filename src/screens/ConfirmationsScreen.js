@@ -34,7 +34,9 @@ export default function ConfirmationsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [activeAccount, ensureSession]);
+    // Keyed on the id: see the note in TradesScreen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAccount?.id, ensureSession]);
 
   useEffect(() => {
     load();

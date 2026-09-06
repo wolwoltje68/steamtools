@@ -30,7 +30,11 @@ export default function TradesScreen() {
     } finally {
       setLoading(false);
     }
-  }, [activeAccount, ensureSession]);
+    // Keyed on the id, not the account object: ensureSession rewrites the
+    // account after renewing a token, and depending on its identity would
+    // re-trigger this load on every refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAccount?.id, ensureSession]);
 
   useEffect(() => {
     load();

@@ -55,7 +55,8 @@ export default function MarketSellScreen({ route, navigation }) {
     } finally {
       setLoadingPrices(false);
     }
-  }, [activeAccount, currency, ensureSession, marketable.length]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Keyed on the id: see the note in TradesScreen.
+  }, [activeAccount?.id, currency, ensureSession, marketable.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadPrices();
