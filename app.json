@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "SteamTools",
+    "slug": "steamtools",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "steamtools",
+    "backgroundColor": "#0e141b",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0e141b"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.steamtools.app"
+    },
+    "android": {
+      "package": "com.steamtools.app",
+      "adaptiveIcon": { "backgroundColor": "#0e141b" }
+    },
+    "plugins": ["expo-secure-store"],
+    "extra": {}
+  }
+}
