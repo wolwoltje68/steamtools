@@ -1,35 +1,37 @@
 // Cryptographically secure randomness.
 //
-// Under Metro this resolves to expo-crypto's native CSPRNG. The module is
-// pulled in through a guarded require rather than a static import so the rest
-// of the crypto stack stays loadable (and therefore unit-testable) outside of
-// React Native, where `globalThis.crypto.getRandomValues` is used instead.
-const nodeStyleRequire = typeof require === 'function' ? require : null;
-
-let expoGetRandomBytes;
-function resolveExpo() {
-  if (expoGetRandomBytes !== undefined) return expoGetRandomBytes;
-  expoGetRandomBytes = null;
-  if (nodeStyleRequire) {
-    try {
-      const mod = nodeStyleRequire('expo-crypto');
-      if (mod && typeof mod.getRandomBytes === 'function') expoGetRandomBytes = mod.getRandomBytes;
-    } catch (err) {
-      // Not running inside Expo; fall through to the WebCrypto path.
-    }
-  }
-  return expoGetRandomBytes;
+// The require below is deliberately a literal call inside a try/catch rather
+// than a static import or an aliased reference:
+//
+//   * Metro only collects dependencies from literal `require('...')` calls, so
+//     aliasing it (`const r = require; r('expo-crypto')`) silently drops the
+//     module from the bundle and leaves this file with no RNG on a device.
+//   * A static `import` would make the whole crypto stack unloadable outside
+//     React Native, where `require` is undefined and the catch below falls
+//     through to WebCrypto instead. That keeps the primitives unit-testable.
+let expoCrypto = null;
+try {
+  // eslint-disable-next-line no-undef
+  expoCrypto = require('expo-crypto');
+} catch (err) {
+  expoCrypto = null; // Not running under Metro.
 }
 
-export function randomBytes(length) {
-  const fromExpo = resolveExpo();
-  if (fromExpo) return new Uint8Array(fromExpo(length));
-
+function platformRandomBytes(length) {
+  if (expoCrypto && typeof expoCrypto.getRandomBytes === 'function') {
+    return new Uint8Array(expoCrypto.getRandomBytes(length));
+  }
   const webcrypto = globalThis.crypto;
   if (webcrypto && typeof webcrypto.getRandomValues === 'function') {
     return webcrypto.getRandomValues(new Uint8Array(length));
   }
+  // Never silently downgrade to Math.random: every caller here is protecting a
+  // Steam account.
   throw new Error('No cryptographically secure random source is available');
+}
+
+export function randomBytes(length) {
+  return platformRandomBytes(length);
 }
 
 /** PKCS#1 v1.5 padding requires a random block containing no zero bytes. */
@@ -47,11 +49,14 @@ export function randomBytesNonZero(length) {
 
 const HEX = '0123456789abcdef';
 
-export function randomHex(byteLength) {
-  const bytes = randomBytes(byteLength);
+function toHex(bytes) {
   let out = '';
   for (let i = 0; i < bytes.length; i++) out += HEX[bytes[i] >> 4] + HEX[bytes[i] & 15];
   return out;
+}
+
+export function randomHex(byteLength) {
+  return toHex(randomBytes(byteLength));
 }
 
 /** Random RFC 4122 v4 UUID, used for local account ids. */
@@ -59,12 +64,16 @@ export function randomUuid() {
   const bytes = randomBytes(16);
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = randomHexFrom(bytes);
+  const hex = toHex(bytes);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function randomHexFrom(bytes) {
-  let out = '';
-  for (let i = 0; i < bytes.length; i++) out += HEX[bytes[i] >> 4] + HEX[bytes[i] & 15];
-  return out;
+/** True when a real CSPRNG is available; surfaced for diagnostics. */
+export function hasSecureRandom() {
+  try {
+    randomBytes(1);
+    return true;
+  } catch (err) {
+    return false;
+  }
 }

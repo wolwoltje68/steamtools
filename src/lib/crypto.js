@@ -76,6 +76,54 @@ export function pbkdf2Sha1(password, salt, iterations, keyLength) {
   return pbkdf2(hmacSha1, 20, password, salt, iterations, keyLength);
 }
 
+/**
+ * Chunked, awaitable PBKDF2-SHA256.
+ *
+ * React Native runs JS on a single thread, so a 100k-iteration derivation would
+ * freeze the interface for seconds. This yields back to the event loop every
+ * few thousand iterations, which keeps the app responsive and lets the unlock
+ * screen show real progress.
+ *
+ * @param {(fraction: number) => void} [onProgress] called with 0..1
+ */
+export async function pbkdf2Sha256Async(password, salt, iterations, keyLength, onProgress) {
+  const passwordBytes = asBytes(password);
+  const saltBytes = asBytes(salt);
+  const blockCount = Math.ceil(keyLength / 32);
+  const output = new Uint8Array(blockCount * 32);
+  const totalIterations = blockCount * iterations;
+  const CHUNK = 2000;
+  let done = 0;
+
+  for (let block = 1; block <= blockCount; block++) {
+    const counter = new Uint8Array([
+      (block >>> 24) & 0xff,
+      (block >>> 16) & 0xff,
+      (block >>> 8) & 0xff,
+      block & 0xff,
+    ]);
+    let u = hmacSha256(passwordBytes, concatBytes(saltBytes, counter));
+    const accumulated = u.slice();
+
+    for (let i = 1; i < iterations; i++) {
+      u = hmacSha256(passwordBytes, u);
+      for (let j = 0; j < 32; j++) accumulated[j] ^= u[j];
+      done++;
+      if (i % CHUNK === 0) {
+        if (onProgress) onProgress(done / totalIterations);
+        await yieldToEventLoop();
+      }
+    }
+    output.set(accumulated, (block - 1) * 32);
+  }
+  if (onProgress) onProgress(1);
+  return output.slice(0, keyLength);
+}
+
+function yieldToEventLoop() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 export function aesCbcEncrypt(key, iv, plaintext) {
   const cbc = new aesjs.ModeOfOperation.cbc(key, iv);
   return new Uint8Array(cbc.encrypt(aesjs.padding.pkcs7.pad(plaintext)));

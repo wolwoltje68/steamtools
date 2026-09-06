@@ -18,7 +18,7 @@ import { isValidSteamId64 } from './steamid.js';
 
 export const EXPORT_MAGIC = 'steamtools-vault';
 export const EXPORT_VERSION = 1;
-const EXPORT_ITERATIONS = 200000;
+const EXPORT_ITERATIONS = 150000;
 
 // SDA's own encryption parameters, needed to read its encrypted maFiles.
 const SDA_ITERATIONS = 50000;

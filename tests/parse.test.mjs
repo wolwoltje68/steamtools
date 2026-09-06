@@ -26,7 +26,7 @@ test('every source file parses as ESM + JSX', () => {
 });
 
 test('relative imports use explicit extensions and resolve', () => {
-  const files = walk('src');
+  const files = [...walk('src'), 'App.js', 'index.js'];
   const missing = [];
   for (const file of files) {
     const source = readFileSync(file, 'utf8');
