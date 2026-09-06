@@ -17,3 +17,4 @@ yarn-error.*
 android/
 ios/
 .web-build/
+screenshots/zz-failure.png
