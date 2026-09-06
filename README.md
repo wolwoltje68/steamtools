@@ -35,7 +35,17 @@ talks to Steam directly with no proxy or server in between.
 - Bulk approval warns when account-level changes are in the batch.
 
 ### Inventory
-- Grid overview per game (CS2, Dota 2, TF2, Rust, Steam cards, and more).
+- **Any public inventory, not just your own.** Paste a SteamID64, a profile URL
+  or just a custom URL name (`b4nny`, or
+  `https://steamcommunity.com/id/b4nny/inventory/`) and it loads. Vanity names
+  are resolved through Steam's profile XML, so no API key is needed. If the URL
+  carries a game in its fragment (`#440_2`) that game is selected too.
+- Someone else's inventory is **read-only**: you can only send or sell items you
+  own. To trade with them, go back to your own inventory, select items and paste
+  their trade offer URL, which Steam does not expose through the inventory.
+- **Apps button** to switch games, listing each appid next to a short name
+  (`730 CS2`, `440 TF2`, `753 Steam`), plus a field for any other appid and
+  context id.
 - Search and a tradable-only filter.
 - **Multi-select** with select-all, invert and clear.
 - From the selection:
@@ -140,7 +150,7 @@ to a fake Steam.
 
 | Command | What it does | Where it runs |
 |---|---|---|
-| `npm test` | 80 unit + integration tests | any OS |
+| `npm test` | 93 unit + integration tests | any OS |
 | `npm run lint` | ESLint over app and scripts | any OS |
 | `npm run verify:platforms` | bundles for Android, iOS and web and checks each output | any OS |
 | `npm run ui-smoke` | drives every screen in a browser against a fake Steam, saves screenshots | any OS with Chromium |
@@ -148,12 +158,31 @@ to a fake Steam.
 | `npm run device android` | builds and launches on an emulator or USB device | any OS with the Android SDK |
 | `npm run device ios` | builds and launches on a simulator or device | macOS only |
 | `npm run device expo-go` | QR code, runs on any phone | any OS, no toolchain |
+| `npm run verify:live` | reads **real** public Steam inventories and checks the parsing | any machine with plain internet |
 
 **Bundling for every platform works on every OS** — Metro is pure JavaScript, so
 a Linux machine can verify the iOS bundle. Only producing an *installable
 binary* needs the platform's toolchain: Xcode for iOS (macOS only), the Android
 SDK for Android. `npm run device ios` says so explicitly rather than failing
 somewhere deep in a native build, and points at EAS Build for iOS without a Mac.
+
+### Checking against real Steam
+
+The unit and UI suites run against a fake Steam, which keeps them fast and
+offline. `npm run verify:live` is the counterpart: it calls the app's own
+`resolveProfile` and `getInventory` against the live site, so a pass means the
+shipped code handles Steam's real responses.
+
+```bash
+npm run verify:live                                           # b4nny: TF2, CS2, Steam items
+node scripts/verify-live.mjs https://steamcommunity.com/id/<name>/
+node scripts/verify-live.mjs 76561197970825039 440
+```
+
+It only reads public data - no sign-in, no trades, no listings - and paces its
+requests, because Steam rate-limits inventory reads per IP. Sandboxed CI
+environments often block steamcommunity.com; the script says so plainly instead
+of reporting a bug that is not there.
 
 ### What the UI smoke test actually does
 
@@ -182,7 +211,7 @@ and compiles native debug builds for Android (Ubuntu) and iOS (macOS).
 ## Development
 
 ```bash
-npm test                              # 80 tests
+npm test                              # 93 tests
 npm run lint
 npm run verify:platforms              # android + ios + web bundles
 npm run ui-smoke                      # screens + screenshots

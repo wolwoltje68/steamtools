@@ -15,6 +15,13 @@ export const DEMO = {
   identitySecret: nodeCrypto.randomBytes(20).toString('base64'),
 };
 
+/** A second, public profile to browse - stands in for a real one like b4nny. */
+export const FOREIGN = {
+  vanity: 'publictrader',
+  steamId: '76561197970825039',
+  displayName: 'publictrader',
+};
+
 const { publicKey, privateKey } = nodeCrypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
 const jwk = publicKey.export({ format: 'jwk' });
 const hex = (b64url) => Buffer.from(b64url, 'base64url').toString('hex');
@@ -237,9 +244,36 @@ async function handle(route, observed, now) {
     return route.fulfill(json({ success: true }));
   }
 
+  if (url.includes('?xml=1')) {
+    // Profile XML, used to resolve a vanity name to a SteamID64.
+    const wanted = url.match(/\/id\/([^/?]+)/);
+    if (wanted && decodeURIComponent(wanted[1]) === FOREIGN.vanity) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/xml',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<profile>
+  <steamID64>${FOREIGN.steamId}</steamID64>
+  <steamID><![CDATA[${FOREIGN.displayName}]]></steamID>
+  <privacyState>public</privacyState>
+</profile>`,
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/xml',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<response><error><![CDATA[The specified profile could not be found.]]></error></response>`,
+    });
+  }
+
   if (url.includes('/inventory/')) {
-    return route.fulfill(json({ success: 1, more_items: 0, assets, descriptions,
-      total_inventory_count: assets.length }));
+    const foreign = url.includes(`/inventory/${FOREIGN.steamId}/`);
+    const slice = foreign ? assets.slice(0, 4) : assets;
+    return route.fulfill(json({ success: 1, more_items: 0, assets: slice, descriptions,
+      total_inventory_count: slice.length }));
   }
 
   if (url.includes('market/priceoverview')) {

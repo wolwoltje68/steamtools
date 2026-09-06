@@ -18,7 +18,7 @@ import { extname, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
 
-import { installSteamMock, DEMO } from './steam-mock.mjs';
+import { installSteamMock, DEMO, FOREIGN } from './steam-mock.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const BUILD_DIR = join(ROOT, '.web-build');
@@ -223,8 +223,50 @@ async function main() {
     }
     ok(`${selectedLabel.trim()}, action bar on-screen`);
 
+    // --- 7b. another user's public inventory --------------------------------
+    step('apps button opens the game picker');
+    await page.getByText('Clear').click(); // drop the selection first
+    await page.getByRole('button', { name: /Change game/ }).click();
+    await page.getByText('Choose a game').waitFor({ timeout: 10000 });
+    // Every row must show the appid alongside the short name.
+    await page.getByText('753', { exact: true }).waitFor({ timeout: 10000 });
+    await page.getByText('Steam', { exact: true }).first().waitFor({ timeout: 10000 });
+    await shot('08b-app-picker');
+    await page.getByText('440', { exact: true }).click();
+    await page.getByRole('button', { name: /Change game, currently 440/ }).waitFor({ timeout: 15000 });
+    ok('switched to appid 440');
+
+    step("loading another user's public inventory");
+    await page.getByRole('button', { name: /Change game/ }).click();
+    await page.getByText('730', { exact: true }).click();
+    await page.getByPlaceholder('SteamID64, profile URL or name').fill(
+      `https://steamcommunity.com/id/${FOREIGN.vanity}/inventory/`
+    );
+    await page.getByRole('button', { name: 'Load', exact: true }).click();
+    await page.getByText(FOREIGN.displayName).first().waitFor({ timeout: 20000 });
+    await page.getByText(/read-only/).waitFor({ timeout: 15000 });
+    await shot('08c-other-inventory');
+    ok(`resolved ${FOREIGN.vanity} -> ${FOREIGN.steamId}`);
+
+    step("another user's items cannot be sent or sold");
+    await page.getByText('Select all').click();
+    await page.waitForTimeout(400);
+    if (await page.getByRole('button', { name: /^Send$/ }).count()) {
+      fail('the send/sell action bar is offered for items the user does not own');
+    } else {
+      ok('action bar correctly withheld');
+    }
+
+    step('returning to your own inventory');
+    await page.getByRole('button', { name: 'Back to my inventory' }).click();
+    await page.getByText('Your inventory').waitFor({ timeout: 20000 });
+    await page.getByPlaceholder(/Search 12 items/).waitFor({ timeout: 20000 });
+    ok('12 items back');
+
     // --- 8. send items ------------------------------------------------------
     step('send-to-trade-URL screen');
+    await page.getByText('Select all').click();
+    await page.getByText(/\d+ selected/).waitFor({ timeout: 10000 });
     await page.getByRole('button', { name: /Send/ }).last().click();
     await page.getByPlaceholder(/tradeoffer\/new/).waitFor({ timeout: 15000 });
     await page.getByPlaceholder(/tradeoffer\/new/).fill(

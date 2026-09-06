@@ -4,8 +4,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { useApp } from '../state/AppContext.js';
-import { getInventory, KNOWN_APPS } from '../steam/inventory.js';
+import { appById, getInventory } from '../steam/inventory.js';
+import { resolveProfile } from '../steam/profile.js';
 import { AccountPicker } from '../ui/AccountPicker.js';
+import { AppPicker } from '../ui/AppPicker.js';
 import { Banner, Button, EmptyState, Input, Loading, Pill, Screen } from '../ui/components.js';
 import { colors, radius, spacing, typography } from '../ui/theme.js';
 
@@ -14,7 +16,8 @@ const COLUMNS = 3;
 export default function InventoryScreen({ navigation }) {
   const { accounts, activeAccount, setActiveAccountId, ensureSession, settings } = useApp();
 
-  const [appId, setAppId] = useState(settings.defaultAppId || 730);
+  const [app, setApp] = useState(() => appById(settings.defaultAppId || 730));
+  const [appPickerOpen, setAppPickerOpen] = useState(false);
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(() => new Set());
   const [loading, setLoading] = useState(false);
@@ -22,7 +25,13 @@ export default function InventoryScreen({ navigation }) {
   const [search, setSearch] = useState('');
   const [tradableOnly, setTradableOnly] = useState(false);
 
-  const app = KNOWN_APPS.find((candidate) => candidate.appid === appId) || KNOWN_APPS[0];
+  // Whose inventory is on screen. null means the signed-in account's own.
+  const [owner, setOwner] = useState(null);
+  const [ownerInput, setOwnerInput] = useState('');
+  const [resolving, setResolving] = useState(false);
+
+  const viewingOther = owner !== null;
+  const ownerSteamId = owner?.steamId || activeAccount?.steamId || null;
 
   const load = useCallback(async () => {
     if (!activeAccount) return;
@@ -30,8 +39,22 @@ export default function InventoryScreen({ navigation }) {
     setError(null);
     setSelected(new Set());
     try {
-      const account = await ensureSession(activeAccount.id);
-      setItems(await getInventory(account, { appid: app.appid, contextid: app.contextid }));
+      // Public inventories need no session. Sign in when we can, since a
+      // logged-in request gets a more generous rate limit, but fall back to an
+      // anonymous request rather than refusing to browse someone else's items.
+      let requester = null;
+      try {
+        requester = await ensureSession(activeAccount.id);
+      } catch (err) {
+        if (!viewingOther) throw err;
+      }
+      setItems(
+        await getInventory(requester, {
+          steamId: ownerSteamId,
+          appid: app.appid,
+          contextid: app.contextid,
+        })
+      );
     } catch (err) {
       setError(err.message);
       setItems([]);
@@ -40,7 +63,7 @@ export default function InventoryScreen({ navigation }) {
     }
     // Keyed on the id: see the note in TradesScreen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeAccount?.id, app.appid, app.contextid, ensureSession]);
+  }, [activeAccount?.id, app.appid, app.contextid, ensureSession, ownerSteamId, viewingOther]);
 
   useEffect(() => {
     load();
@@ -89,6 +112,43 @@ export default function InventoryScreen({ navigation }) {
     });
   }, [visible]);
 
+  const loadOwner = useCallback(async () => {
+    const text = ownerInput.trim();
+    if (!text) return;
+    setResolving(true);
+    setError(null);
+    try {
+      let requester = null;
+      try {
+        requester = await ensureSession(activeAccount.id);
+      } catch (err) {
+        // Resolving a public profile works fine without a session.
+      }
+      const profile = await resolveProfile(requester, text);
+
+      // An inventory URL may name the game in its fragment (#730_2).
+      if (profile.appid) setApp(appById(profile.appid, profile.contextid));
+
+      if (profile.steamId === activeAccount?.steamId) {
+        setOwner(null); // they pasted their own profile
+      } else {
+        setOwner(profile);
+      }
+      setOwnerInput('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setResolving(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownerInput, activeAccount?.id, activeAccount?.steamId, ensureSession]);
+
+  const backToMine = useCallback(() => {
+    setOwner(null);
+    setOwnerInput('');
+    setError(null);
+  }, []);
+
   if (accounts.length === 0) {
     return (
       <Screen>
@@ -115,23 +175,61 @@ export default function InventoryScreen({ navigation }) {
           <View>
             <Banner kind="error" message={error} onDismiss={() => setError(null)} />
 
-            <FlatList
-              horizontal
-              data={KNOWN_APPS}
-              keyExtractor={(entry) => String(entry.appid)}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.apps}
-              renderItem={({ item: entry }) => (
-                <Pressable
-                  onPress={() => setAppId(entry.appid)}
-                  style={[styles.appChip, entry.appid === appId && styles.appChipActive]}
-                >
-                  <Text style={[styles.appLabel, entry.appid === appId && styles.appLabelActive]}>
-                    {entry.name}
-                  </Text>
-                </Pressable>
-              )}
-            />
+            <View style={styles.controls}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Change game, currently ${app.appid} ${app.short}`}
+                onPress={() => setAppPickerOpen(true)}
+                style={({ pressed }) => [styles.appsButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.appsId}>{app.appid}</Text>
+                <Text style={styles.appsShort} numberOfLines={1}>
+                  {app.short}
+                </Text>
+                <Text style={styles.appsChevron}>▾</Text>
+              </Pressable>
+
+              <Pill
+                label={viewingOther ? owner.displayName : 'Your inventory'}
+                tone={viewingOther ? 'warning' : 'accent'}
+                style={styles.ownerPill}
+              />
+            </View>
+
+            <View style={styles.ownerRow}>
+              <Input
+                value={ownerInput}
+                onChangeText={setOwnerInput}
+                placeholder="SteamID64, profile URL or name"
+                style={styles.ownerInput}
+                onSubmitEditing={loadOwner}
+                returnKeyType="go"
+                autoCapitalize="none"
+              />
+              <Button
+                title="Load"
+                onPress={loadOwner}
+                loading={resolving}
+                disabled={!ownerInput.trim()}
+                style={styles.ownerButton}
+              />
+            </View>
+
+            {viewingOther ? (
+              <Banner
+                kind="warning"
+                message={`Viewing ${owner.displayName}'s inventory. It is read-only: you can only send or sell items you own. To trade with them, go back to your own inventory, select items and paste their trade offer URL.`}
+              />
+            ) : null}
+
+            {viewingOther ? (
+              <Button
+                title="Back to my inventory"
+                variant="ghost"
+                onPress={backToMine}
+                style={styles.backButton}
+              />
+            ) : null}
 
             <Input
               value={search}
@@ -171,14 +269,15 @@ export default function InventoryScreen({ navigation }) {
               description={
                 items.length
                   ? 'No items match the current search or filter.'
-                  : `No ${app.name} items found. The inventory may be private or empty.`
+                  : `No ${app.short} items in ${viewingOther ? `${owner.displayName}'s` : 'your'} inventory. ` +
+                    'It may be empty, or set to private.'
               }
             />
           )
         }
       />
 
-      {selectedItems.length > 0 ? (
+      {selectedItems.length > 0 && !viewingOther ? (
         <View style={styles.actionBar}>
           <View style={styles.actionSummary}>
             <Text style={typography.heading}>{selectedItems.length} selected</Text>
@@ -205,6 +304,15 @@ export default function InventoryScreen({ navigation }) {
           </View>
         </View>
       ) : null}
+      <AppPicker
+        visible={appPickerOpen}
+        current={app}
+        onClose={() => setAppPickerOpen(false)}
+        onSelect={(choice) => {
+          setApp(appById(choice.appid, choice.contextid));
+          setAppPickerOpen(false);
+        }}
+      />
     </Screen>
   );
 }
@@ -246,18 +354,32 @@ const styles = StyleSheet.create({
   screen: { padding: 0, paddingBottom: 0 },
   list: { paddingHorizontal: spacing.lg, paddingBottom: 140 },
   column: { gap: spacing.sm, marginBottom: spacing.sm },
-  apps: { gap: spacing.xs, paddingBottom: spacing.md },
-  appChip: {
+  controls: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  appsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.accent,
   },
-  appChipActive: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
-  appLabel: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
-  appLabelActive: { color: colors.text },
+  appsId: {
+    ...typography.caption,
+    color: colors.accent,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  appsShort: { color: colors.text, fontSize: 14, fontWeight: '700', maxWidth: 130 },
+  appsChevron: { color: colors.textMuted, fontSize: 11 },
+  ownerPill: { flexShrink: 1 },
+  pressed: { opacity: 0.7 },
+  ownerRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  ownerInput: { flex: 1 },
+  ownerButton: { paddingHorizontal: spacing.lg },
+  backButton: { marginBottom: spacing.sm },
   search: { marginBottom: spacing.sm },
   toolbar: {
     flexDirection: 'row',

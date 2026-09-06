@@ -6,16 +6,39 @@ const IMAGE_BASE = 'https://community.cloudflare.steamstatic.com/economy/image';
 const PAGE_SIZE = 2000;
 const MAX_PAGES = 10; // 20k items is far beyond anything worth rendering on a phone
 
-/** The games worth offering by default, with their inventory context ids. */
+/**
+ * Games with tradable inventories, with the context id each keeps its items in.
+ * `short` is what the app picker shows next to the appid.
+ */
 export const KNOWN_APPS = [
-  { appid: 730, contextid: '2', name: 'Counter-Strike 2' },
-  { appid: 570, contextid: '2', name: 'Dota 2' },
-  { appid: 440, contextid: '2', name: 'Team Fortress 2' },
-  { appid: 252490, contextid: '2', name: 'Rust' },
-  { appid: 753, contextid: '6', name: 'Steam (cards, backgrounds)' },
-  { appid: 232090, contextid: '2', name: 'Killing Floor 2' },
-  { appid: 578080, contextid: '2', name: 'PUBG' },
+  { appid: 730, contextid: '2', short: 'CS2', name: 'Counter-Strike 2' },
+  { appid: 570, contextid: '2', short: 'Dota 2', name: 'Dota 2' },
+  { appid: 440, contextid: '2', short: 'TF2', name: 'Team Fortress 2' },
+  { appid: 753, contextid: '6', short: 'Steam', name: 'Steam (cards, backgrounds, emoticons)' },
+  { appid: 252490, contextid: '2', short: 'Rust', name: 'Rust' },
+  { appid: 578080, contextid: '2', short: 'PUBG', name: 'PUBG: Battlegrounds' },
+  { appid: 232090, contextid: '2', short: 'KF2', name: 'Killing Floor 2' },
+  { appid: 304930, contextid: '2', short: 'Unturned', name: 'Unturned' },
+  { appid: 218620, contextid: '2', short: 'PAYDAY 2', name: 'PAYDAY 2' },
+  { appid: 322330, contextid: '2', short: "Don't Starve", name: "Don't Starve Together" },
+  { appid: 238960, contextid: '2', short: 'PoE', name: 'Path of Exile' },
+  { appid: 433850, contextid: '2', short: 'Z1BR', name: 'Z1 Battle Royale' },
 ];
+
+export const DEFAULT_CONTEXT_ID = '2';
+
+/** Look up a known game, or synthesise an entry for a custom appid. */
+export function appById(appid, contextid) {
+  const known = KNOWN_APPS.find((entry) => entry.appid === Number(appid));
+  if (known && (!contextid || known.contextid === String(contextid))) return known;
+  return {
+    appid: Number(appid),
+    contextid: String(contextid || DEFAULT_CONTEXT_ID),
+    short: known ? known.short : `App ${appid}`,
+    name: known ? known.name : `Custom app ${appid}`,
+    custom: !known,
+  };
+}
 
 export function itemImageUrl(iconUrl, size = '128fx128f') {
   if (!iconUrl) return null;
