@@ -14,7 +14,8 @@
     "device": "node scripts/run-device.mjs",
     "verify:platforms": "node scripts/verify-platforms.mjs",
     "verify:all": "npm test && npm run lint && npm run verify:platforms && npm run ui-smoke",
-    "verify:live": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-live.mjs"
+    "verify:live": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-live.mjs",
+    "verify:live:auth": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-live-auth.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~3.2.3",

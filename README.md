@@ -150,7 +150,7 @@ to a fake Steam.
 
 | Command | What it does | Where it runs |
 |---|---|---|
-| `npm test` | 93 unit + integration tests | any OS |
+| `npm test` | 98 unit + integration tests | any OS |
 | `npm run lint` | ESLint over app and scripts | any OS |
 | `npm run verify:platforms` | bundles for Android, iOS and web and checks each output | any OS |
 | `npm run ui-smoke` | drives every screen in a browser against a fake Steam, saves screenshots | any OS with Chromium |
@@ -158,7 +158,8 @@ to a fake Steam.
 | `npm run device android` | builds and launches on an emulator or USB device | any OS with the Android SDK |
 | `npm run device ios` | builds and launches on a simulator or device | macOS only |
 | `npm run device expo-go` | QR code, runs on any phone | any OS, no toolchain |
-| `npm run verify:live` | reads **real** public Steam inventories and checks the parsing | any machine with plain internet |
+| `npm run verify:live` | reads **real** public Steam inventories, no account needed | any machine with plain internet |
+| `npm run verify:live:auth` | signs in to **your** account and reads trades, confirmations, inventory and listings | your own machine |
 
 **Bundling for every platform works on every OS** — Metro is pure JavaScript, so
 a Linux machine can verify the iOS bundle. Only producing an *installable
@@ -183,6 +184,38 @@ It only reads public data - no sign-in, no trades, no listings - and paces its
 requests, because Steam rate-limits inventory reads per IP. Sandboxed CI
 environments often block steamcommunity.com; the script says so plainly instead
 of reporting a bug that is not there.
+
+To exercise the signed-in half - login, trade offers, confirmations, your own
+inventory and market listings - there is a second script:
+
+```bash
+export STEAM_ACCOUNT=yourname
+export STEAM_PASSWORD='...'
+export STEAM_SHARED_SECRET='base64=='      # generates the Guard code
+export STEAM_IDENTITY_SECRET='base64=='    # optional, for confirmations
+npm run verify:live:auth
+
+# or, from a maFile you already have:
+node scripts/verify-live-auth.mjs --mafile ./yourname.maFile
+```
+
+**Run it yourself, on your own machine.** Three properties make that safe:
+
+- **Read-only by construction.** It does not import `acceptTradeOffer`,
+  `sendTradeOffer`, `respondToConfirmation`, `createSellListing` or any other
+  call that changes account state, so no run of it can move an item or accept a
+  trade. A test enforces this, so a later edit cannot quietly break it.
+- **Credentials never come from arguments**, only from the environment or a
+  maFile, so they stay out of your shell history. Also enforced by a test.
+- **Secrets are masked in the output** (`BGht…QE= [28 chars]`), so the result is
+  safe to paste into a bug report. Also enforced by a test.
+
+Steam treats this as a new sign-in and may email you about it. That is expected:
+it is a real login through the same code path the app uses.
+
+Do not send Steam credentials to anyone, including in a chat with an AI
+assistant. A password together with `shared_secret` and `identity_secret` is
+full control of the account, Steam Guard included.
 
 ### What the UI smoke test actually does
 
@@ -211,7 +244,7 @@ and compiles native debug builds for Android (Ubuntu) and iOS (macOS).
 ## Development
 
 ```bash
-npm test                              # 93 tests
+npm test                              # 98 tests
 npm run lint
 npm run verify:platforms              # android + ios + web bundles
 npm run ui-smoke                      # screens + screenshots
