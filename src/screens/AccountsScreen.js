@@ -153,7 +153,7 @@ export default function AccountsScreen({ navigation }) {
               ) : null}
             </View>
 
-            {capabilities.canTrade === false || !capabilities.canSendTrades ? (
+            {capabilities.canSendTrades ? null : (
               <Text style={styles.limitNote}>{capabilities.limitsSummary}</Text>
             ) : null}
 
