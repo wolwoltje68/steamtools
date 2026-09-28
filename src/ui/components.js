@@ -115,8 +115,20 @@ export function Input(props) {
 }
 
 export function ToggleRow({ label, description, value, onValueChange, disabled }) {
+  // The whole row toggles, not just the switch: a 51x31 control is a small
+  // target on a phone, and the label is the obvious thing to tap.
   return (
-    <View style={[styles.toggleRow, disabled && styles.toggleDisabled]}>
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityState={{ checked: !!value, disabled: !!disabled }}
+      accessibilityLabel={label}
+      onPress={disabled ? undefined : () => onValueChange(!value)}
+      style={({ pressed }) => [
+        styles.toggleRow,
+        disabled && styles.toggleDisabled,
+        pressed && !disabled && styles.pressed,
+      ]}
+    >
       <View style={styles.toggleText}>
         <Text style={typography.body}>{label}</Text>
         {description ? <Text style={styles.toggleDescription}>{description}</Text> : null}
@@ -127,8 +139,10 @@ export function ToggleRow({ label, description, value, onValueChange, disabled }
         disabled={disabled}
         trackColor={{ false: colors.border, true: colors.accentMuted }}
         thumbColor={value ? colors.accent : colors.textMuted}
+        // The row already handles the tap; keep the switch from firing twice.
+        pointerEvents="none"
       />
-    </View>
+    </Pressable>
   );
 }
 

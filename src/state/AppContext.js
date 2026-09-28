@@ -139,7 +139,7 @@ export function AppProvider({ children }) {
    * re-logging in as needed. Throws if neither is possible.
    */
   const ensureSession = useCallback(
-    async (accountOrId) => {
+    async (accountOrId, { onGuardRequired } = {}) => {
       const id = typeof accountOrId === 'string' ? accountOrId : accountOrId.id;
       let account = accountsRef.current.find((candidate) => candidate.id === id);
       if (!account) throw new Error('That account is no longer in the vault');
@@ -167,10 +167,15 @@ export function AppProvider({ children }) {
         );
       }
 
+      // An account without a mobile authenticator gets its Guard code by email,
+      // which only a human can read. Callers that can ask (the Accounts screen)
+      // pass a prompt; callers that cannot (automation) leave it out and get a
+      // clear error instead of a silent stall.
       const result = await login({
         accountName: account.accountName,
         password: account.password,
         sharedSecret: account.sharedSecret,
+        onGuardRequired,
       });
       const patch = {
         steamId: account.steamId || result.steamId,

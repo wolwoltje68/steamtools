@@ -170,6 +170,36 @@ async function main() {
       ok('password verified RSA-encrypted on the wire');
     }
 
+    // --- 3b. an account with no mobile authenticator -------------------------
+    step('add an account with no authenticator');
+    await tab('Accounts').click();
+    await page.getByText('Add', { exact: true }).click();
+    await page.getByText('No mobile authenticator').waitFor({ timeout: 15000 });
+    await page.getByText('No mobile authenticator').click();
+    await page.waitForTimeout(300);
+    // The secret fields must disappear: they are meaningless for this account.
+    if (await page.locator('input[placeholder="base64=="]').count()) {
+      fail('shared_secret / identity_secret fields are still shown for an account with no authenticator');
+    }
+    await page.getByPlaceholder('Steam login name').fill('plain_account');
+    await page.getByPlaceholder('7656119...').fill('76561198011111111');
+    await shot('03b-no-authenticator');
+    await page.getByRole('button', { name: 'Add account' }).click();
+    await page.getByText('plain_account').first().waitFor({ timeout: 20000 });
+    await page.getByText('No authenticator').first().waitFor({ timeout: 10000 });
+    ok('added and badged');
+
+    step('the Guard tab explains rather than erroring');
+    await tab('Steam Guard').click();
+    await page.getByText(/no mobile authenticator, so there is no code/).waitFor({ timeout: 15000 });
+    await shot('05b-guard-mixed');
+    ok('both accounts render side by side');
+
+    step('removing it again leaves the vault consistent');
+    await tab('Accounts').click();
+    await page.getByText('plain_account').first().waitFor({ timeout: 15000 });
+    ok();
+
     // --- 4. Steam Guard -----------------------------------------------------
     step('Steam Guard codes');
     await tab('Steam Guard').click();

@@ -64,19 +64,31 @@ function steamIdFromUri(uri) {
 
 /**
  * Turn a parsed maFile object into the account shape the app uses.
+ *
+ * `requireSharedSecret` draws a deliberate distinction. A *maFile* without a
+ * shared_secret is malformed - holding that secret is the file's entire
+ * purpose - so importing one should fail loudly. An account *added by hand*
+ * may legitimately have no mobile authenticator at all, and is still useful
+ * for browsing inventories and handling trade offers.
+ *
  * @param {object} raw
- * @param {{sourceName?: string}} options
+ * @param {{sourceName?: string, requireSharedSecret?: boolean}} options
  */
-export function normaliseMaFile(raw, { sourceName } = {}) {
+export function normaliseMaFile(raw, { sourceName, requireSharedSecret = true } = {}) {
   if (!raw || typeof raw !== 'object') throw new MaFileError('That file does not contain a maFile object');
 
   const session = raw.Session || raw.session || {};
   const sharedSecret = firstString(raw.shared_secret, raw.sharedSecret);
   const identitySecret = firstString(raw.identity_secret, raw.identitySecret);
 
-  if (!sharedSecret) {
+  if (!sharedSecret && requireSharedSecret) {
     throw new MaFileError('This maFile has no shared_secret, so it cannot generate Steam Guard codes', {
       code: 'NO_SHARED_SECRET',
+    });
+  }
+  if (!sharedSecret && !firstString(raw.account_name, raw.accountName, sourceName)) {
+    throw new MaFileError('An account without an authenticator still needs an account name', {
+      code: 'NO_ACCOUNT_NAME',
     });
   }
 
@@ -116,6 +128,31 @@ export function normaliseMaFile(raw, { sourceName } = {}) {
 
     automation: normaliseAutomation(raw.automation),
     addedAt: Number(raw.added_at) || Math.floor(Date.now() / 1000),
+  };
+}
+
+/**
+ * What an account can actually do, given which secrets it holds.
+ *
+ * Steam's own rules matter as much as ours here: an account with no Steam Guard
+ * at all cannot trade or use the Community Market, and one with email Guard
+ * only trades into a multi-day hold. Neither is something this app can change,
+ * so the UI states it rather than letting a trade fail confusingly later.
+ */
+export function accountCapabilities(account) {
+  const hasAuthenticator = !!account?.sharedSecret;
+  const canConfirm = !!account?.identitySecret;
+  return {
+    hasAuthenticator,
+    canGenerateCodes: hasAuthenticator,
+    canConfirm,
+    // Everything below works without an authenticator.
+    canBrowseInventory: true,
+    canReadTrades: true,
+    canRespondToTrades: true,
+    canSendTrades: true,
+    // Market listings always need a confirmation, so they need identity_secret.
+    canListOnMarket: canConfirm,
   };
 }
 

@@ -1,10 +1,11 @@
 // Account list: session state, quick sign-in and navigation to per-account settings.
-import React, { useCallback, useState } from 'react';
-import { Alert, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { Alert, Modal, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { useApp } from '../state/AppContext.js';
 import { needsRenewal } from '../steam/session.js';
-import { Banner, Button, Card, EmptyState, Pill, Screen, SectionHeader } from '../ui/components.js';
+import { accountCapabilities } from '../steam/maFile.js';
+import { Banner, Button, Card, EmptyState, Field, Input, Pill, Screen, SectionHeader } from '../ui/components.js';
 import { colors, spacing, typography } from '../ui/theme.js';
 
 export default function AccountsScreen({ navigation }) {
@@ -14,12 +15,42 @@ export default function AccountsScreen({ navigation }) {
   const [notice, setNotice] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Steam emails a code to accounts with no mobile authenticator. Only a person
+  // can read it, so sign-in pauses here until they type it in.
+  const [guardPrompt, setGuardPrompt] = useState(null);
+  const [guardCode, setGuardCode] = useState('');
+  const guardResolver = useRef(null);
+
+  const askForGuardCode = useCallback(
+    (request) =>
+      new Promise((resolve) => {
+        guardResolver.current = resolve;
+        setGuardCode('');
+        setGuardPrompt(request);
+      }),
+    []
+  );
+
+  const submitGuardCode = useCallback(() => {
+    const resolve = guardResolver.current;
+    guardResolver.current = null;
+    setGuardPrompt(null);
+    if (resolve) resolve(guardCode.trim().toUpperCase());
+  }, [guardCode]);
+
+  const cancelGuardCode = useCallback(() => {
+    const resolve = guardResolver.current;
+    guardResolver.current = null;
+    setGuardPrompt(null);
+    if (resolve) resolve(null); // login turns this into a readable error
+  }, []);
+
   const signIn = useCallback(
     async (account) => {
       setBusyId(account.id);
       setError(null);
       try {
-        await ensureSession(account.id);
+        await ensureSession(account.id, { onGuardRequired: askForGuardCode });
         setNotice(`${account.accountName} is signed in.`);
       } catch (err) {
         setError(`${account.accountName}: ${err.message}`);
@@ -27,7 +58,7 @@ export default function AccountsScreen({ navigation }) {
         setBusyId(null);
       }
     },
-    [ensureSession]
+    [ensureSession, askForGuardCode]
   );
 
   const refreshAll = useCallback(async () => {
@@ -102,7 +133,12 @@ export default function AccountsScreen({ navigation }) {
 
             <View style={styles.badges}>
               {account.password ? <Pill label="Password saved" tone="accent" /> : null}
-              {account.identitySecret ? null : <Pill label="No identity_secret" tone="warning" />}
+              {accountCapabilities(account).hasAuthenticator ? null : (
+                <Pill label="No authenticator" tone="warning" />
+              )}
+              {account.sharedSecret && !account.identitySecret ? (
+                <Pill label="No identity_secret" tone="warning" />
+              ) : null}
               {account.automation?.enabled ? (
                 <Pill label={automationRunning ? 'Automation on' : 'Automation idle'} tone="success" />
               ) : null}
@@ -136,6 +172,39 @@ export default function AccountsScreen({ navigation }) {
           </Card>
         );
       })}
+
+      <Modal visible={!!guardPrompt} transparent animationType="fade" onRequestClose={cancelGuardCode}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={typography.heading}>Steam Guard code</Text>
+            <Text style={styles.modalHelp}>
+              {guardPrompt?.message ||
+                'Steam sent a code to the email address on this account. Enter it to finish signing in.'}
+            </Text>
+            <Field>
+              <Input
+                value={guardCode}
+                onChangeText={setGuardCode}
+                placeholder="ABCDE"
+                autoCapitalize="characters"
+                autoFocus
+                maxLength={8}
+                onSubmitEditing={submitGuardCode}
+                returnKeyType="go"
+              />
+            </Field>
+            <View style={styles.modalActions}>
+              <Button title="Cancel" variant="ghost" onPress={cancelGuardCode} style={styles.modalAction} />
+              <Button
+                title="Sign in"
+                onPress={submitGuardCode}
+                disabled={guardCode.trim().length < 5}
+                style={styles.modalAction}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -147,4 +216,24 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   action: { flex: 1 },
   remove: { marginTop: spacing.sm, borderColor: 'transparent' },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  modalHelp: { ...typography.caption, lineHeight: 18, marginBottom: spacing.sm },
+  modalActions: { flexDirection: 'row', gap: spacing.sm },
+  modalAction: { flex: 1 },
 });

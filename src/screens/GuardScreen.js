@@ -73,6 +73,7 @@ export default function GuardScreen() {
 
 function GuardCard({ account, now, remaining, copied, onCopy }) {
   const code = useMemo(() => {
+    if (!account.sharedSecret) return null;
     try {
       return generateAuthCode(account.sharedSecret, now);
     } catch (err) {
@@ -96,10 +97,19 @@ function GuardCard({ account, now, remaining, copied, onCopy }) {
             </Text>
           ) : null}
         </View>
-        {account.identitySecret ? null : <Pill label="No confirmations" tone="warning" />}
+        {!account.sharedSecret ? (
+          <Pill label="No authenticator" tone="warning" />
+        ) : account.identitySecret ? null : (
+          <Pill label="No confirmations" tone="warning" />
+        )}
       </View>
 
-      {code ? (
+      {!account.sharedSecret ? (
+        <Text style={styles.noAuthenticator}>
+          This account has no mobile authenticator, so there is no code to show. Steam emails a code
+          when signing in instead.
+        </Text>
+      ) : code ? (
         <Pressable onPress={() => onCopy(account, code)} style={styles.codeRow}>
           <Text style={[styles.code, expiringSoon && styles.codeExpiring]}>{code}</Text>
           <Text style={styles.countdown}>{copied ? 'Copied' : `${remaining}s`}</Text>
@@ -108,14 +118,16 @@ function GuardCard({ account, now, remaining, copied, onCopy }) {
         <Text style={styles.badSecret}>This account’s shared_secret is not valid base64.</Text>
       )}
 
-      <View style={styles.progressTrack}>
-        <View
-          style={[
-            styles.progressFill,
-            { width: `${fraction * 100}%`, backgroundColor: expiringSoon ? colors.warning : colors.accent },
-          ]}
-        />
-      </View>
+      {account.sharedSecret ? (
+        <View style={styles.progressTrack}>
+          <View
+            style={[
+              styles.progressFill,
+              { width: `${fraction * 100}%`, backgroundColor: expiringSoon ? colors.warning : colors.accent },
+            ]}
+          />
+        </View>
+      ) : null}
     </Card>
   );
 }
@@ -141,5 +153,6 @@ const styles = StyleSheet.create({
   progressTrack: { height: 3, backgroundColor: colors.background, borderRadius: radius.sm, overflow: 'hidden' },
   progressFill: { height: 3 },
   badSecret: { color: '#f0a49c', marginVertical: spacing.md, fontSize: 13 },
+  noAuthenticator: { ...typography.caption, marginVertical: spacing.md, lineHeight: 18 },
   hint: { ...typography.caption, textAlign: 'center', marginTop: spacing.sm },
 });

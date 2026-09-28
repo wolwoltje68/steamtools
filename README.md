@@ -122,6 +122,32 @@ the device. There is no recovery for it.
 Then either import maFiles (Accounts → Add → Choose files) or add an account by
 hand with its `shared_secret` and `identity_secret`.
 
+### Accounts without a mobile authenticator
+
+An account with no maFile can still be added: turn on **No mobile
+authenticator** when adding it by hand. It works for browsing inventories,
+reading trade offers, and accepting, declining or sending trades. Steam emails a
+Guard code at sign-in and the app prompts for it.
+
+What it cannot do, and why:
+
+| | |
+|---|---|
+| Steam Guard codes | needs `shared_secret`, which only the authenticator has |
+| Mobile confirmations | needs `identity_secret`, same reason |
+| Market listings | every listing requires a confirmation |
+| Unattended automation | nobody can read the emailed code, so it fails with a clear message rather than stalling |
+
+Steam's own rules bite harder than the app's: an account with **no Steam Guard
+at all cannot trade or use the Community Market**, and one with **email Guard
+only puts every trade into a multi-day hold**. Only the mobile authenticator,
+active for a week, lifts that. The app states this when you add such an account
+rather than letting a trade fail confusingly later.
+
+An imported *maFile* without a `shared_secret` is still rejected, because
+holding that secret is the file's whole purpose - such a file is corrupt, not
+authenticator-less.
+
 ### Signing in
 
 - `shared_secret` alone is enough to generate Guard codes.
@@ -150,7 +176,7 @@ to a fake Steam.
 
 | Command | What it does | Where it runs |
 |---|---|---|
-| `npm test` | 98 unit + integration tests | any OS |
+| `npm test` | 109 unit + integration tests | any OS |
 | `npm run lint` | ESLint over app and scripts | any OS |
 | `npm run verify:platforms` | bundles for Android, iOS and web and checks each output | any OS |
 | `npm run ui-smoke` | drives every screen in a browser against a fake Steam, saves screenshots | any OS with Chromium |
@@ -244,7 +270,7 @@ and compiles native debug builds for Android (Ubuntu) and iOS (macOS).
 ## Development
 
 ```bash
-npm test                              # 98 tests
+npm test                              # 109 tests
 npm run lint
 npm run verify:platforms              # android + ios + web bundles
 npm run ui-smoke                      # screens + screenshots

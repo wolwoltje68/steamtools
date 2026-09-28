@@ -14,7 +14,7 @@ import {
   parseJsonPreservingSteamIds,
   parseMaFileText,
 } from '../steam/maFile.js';
-import { Banner, Button, Card, Field, Input, Screen, SectionHeader } from '../ui/components.js';
+import { Banner, Button, Card, Field, Input, Screen, SectionHeader, ToggleRow } from '../ui/components.js';
 import { spacing, typography } from '../ui/theme.js';
 
 export default function AddAccountScreen({ navigation }) {
@@ -32,6 +32,9 @@ export default function AddAccountScreen({ navigation }) {
     identitySecret: '',
     password: '',
   });
+  // Accounts without the Steam mobile authenticator are legitimate; they just
+  // cannot generate codes or approve confirmations.
+  const [noAuthenticator, setNoAuthenticator] = useState(false);
 
   async function readFiles() {
     const result = await DocumentPicker.getDocumentAsync({
@@ -171,13 +174,16 @@ export default function AddAccountScreen({ navigation }) {
     setError(null);
     setNotice(null);
     try {
-      const account = normaliseMaFile({
-        account_name: manual.accountName.trim(),
-        steamid: manual.steamId.trim(),
-        shared_secret: manual.sharedSecret.trim(),
-        identity_secret: manual.identitySecret.trim(),
-        password: manual.password || undefined,
-      });
+      const account = normaliseMaFile(
+        {
+          account_name: manual.accountName.trim(),
+          steamid: manual.steamId.trim(),
+          shared_secret: noAuthenticator ? '' : manual.sharedSecret.trim(),
+          identity_secret: noAuthenticator ? '' : manual.identitySecret.trim(),
+          password: manual.password || undefined,
+        },
+        { requireSharedSecret: !noAuthenticator }
+      );
       await addAccounts([account]);
       setManual({ accountName: '', steamId: '', sharedSecret: '', identitySecret: '', password: '' });
       setNotice(`Added ${account.accountName}.`);
@@ -224,6 +230,24 @@ export default function AddAccountScreen({ navigation }) {
 
       <SectionHeader title="Add manually" />
       <Card>
+        <ToggleRow
+          label="No mobile authenticator"
+          description="For an account that has no maFile. It can browse inventories and handle trade offers, but cannot generate Steam Guard codes or approve confirmations."
+          value={noAuthenticator}
+          onValueChange={setNoAuthenticator}
+        />
+
+        {noAuthenticator ? (
+          <Banner
+            kind="info"
+            message={
+              'Steam itself limits these accounts: with no Steam Guard at all an account cannot trade or use the ' +
+              'Community Market, and with email Guard only, trades are held for several days. Steam will email a ' +
+              'code each time this app signs in.'
+            }
+          />
+        ) : null}
+
         <Field label="Account name">
           <Input
             value={manual.accountName}
@@ -239,20 +263,24 @@ export default function AddAccountScreen({ navigation }) {
             keyboardType="number-pad"
           />
         </Field>
-        <Field label="shared_secret" hint="Base64. Generates the Steam Guard codes.">
-          <Input
-            value={manual.sharedSecret}
-            onChangeText={(value) => setManual((m) => ({ ...m, sharedSecret: value }))}
-            placeholder="base64=="
-          />
-        </Field>
-        <Field label="identity_secret" hint="Base64. Needed to accept trade and market confirmations.">
-          <Input
-            value={manual.identitySecret}
-            onChangeText={(value) => setManual((m) => ({ ...m, identitySecret: value }))}
-            placeholder="base64=="
-          />
-        </Field>
+        {noAuthenticator ? null : (
+          <>
+            <Field label="shared_secret" hint="Base64. Generates the Steam Guard codes.">
+              <Input
+                value={manual.sharedSecret}
+                onChangeText={(value) => setManual((m) => ({ ...m, sharedSecret: value }))}
+                placeholder="base64=="
+              />
+            </Field>
+            <Field label="identity_secret" hint="Base64. Needed to accept trade and market confirmations.">
+              <Input
+                value={manual.identitySecret}
+                onChangeText={(value) => setManual((m) => ({ ...m, identitySecret: value }))}
+                placeholder="base64=="
+              />
+            </Field>
+          </>
+        )}
         <Field
           label="Steam password (optional)"
           hint="Stored encrypted in the vault, and included in exports if you choose. Lets the app sign in again by itself."
@@ -268,7 +296,7 @@ export default function AddAccountScreen({ navigation }) {
         <Button
           title="Add account"
           onPress={handleManualAdd}
-          disabled={!manual.accountName.trim() || !manual.sharedSecret.trim()}
+          disabled={!manual.accountName.trim() || (!noAuthenticator && !manual.sharedSecret.trim())}
         />
       </Card>
 
