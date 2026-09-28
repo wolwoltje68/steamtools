@@ -150,3 +150,84 @@ test('a cancelled prompt fails clearly rather than submitting an empty code', as
   );
   assert.ok(!calls.some((c) => c.url.includes('UpdateAuthSessionWithSteamGuardCode')));
 });
+
+// --- the three Guard levels ------------------------------------------------
+
+import { GuardKind, tradingLimits, describeGuardKind, normaliseGuardKind } from '../src/steam/maFile.js';
+import { guardKindFromSteam } from '../src/steam/session.js';
+import { accountCapabilities as caps } from '../src/steam/maFile.js';
+
+test('Steam\'s own answer maps onto the three Guard levels', () => {
+  assert.equal(guardKindFromSteam([GuardType.DeviceCode]), 'mobile');
+  assert.equal(guardKindFromSteam([GuardType.DeviceConfirmation]), 'mobile');
+  assert.equal(guardKindFromSteam([GuardType.EmailCode]), 'email');
+  assert.equal(guardKindFromSteam([GuardType.EmailConfirmation]), 'email');
+  assert.equal(guardKindFromSteam([GuardType.None]), 'none');
+  assert.equal(guardKindFromSteam([]), 'none');
+  // Mobile wins when Steam offers both.
+  assert.equal(guardKindFromSteam([GuardType.EmailCode, GuardType.DeviceCode]), 'mobile');
+});
+
+test('login reports the Guard level Steam declared', async () => {
+  for (const [types, expected] of [
+    [[GuardType.None], 'none'],
+    [[GuardType.EmailCode], 'email'],
+    [[GuardType.DeviceCode], 'mobile'],
+  ]) {
+    mockSteam(types);
+    const result = await login({
+      accountName: 'plain',
+      password: 'pw',
+      sharedSecret: types.includes(GuardType.DeviceCode) ? 'BGhtL4KLGRUtV1sNRPRVQfLBnQE=' : undefined,
+      onGuardRequired: async () => 'K7T2M',
+    });
+    assert.equal(result.guardKind, expected, `types ${types}`);
+  }
+});
+
+test("Steam's trading rules are stated per level, not guessed", () => {
+  assert.deepEqual(
+    { ...tradingLimits(GuardKind.Mobile), summary: undefined },
+    { canTrade: true, canUseMarket: true, holdDays: 0, summary: undefined }
+  );
+  assert.equal(tradingLimits(GuardKind.Email).holdDays, 15);
+  assert.equal(tradingLimits(GuardKind.None).canTrade, false, 'no Guard means no trading at all');
+  assert.equal(tradingLimits(GuardKind.None).canUseMarket, false);
+});
+
+test('an account with no Guard is not offered trade or market actions', () => {
+  const noGuard = caps({ guardKind: GuardKind.None });
+  assert.equal(noGuard.canSendTrades, false);
+  assert.equal(noGuard.canRespondToTrades, false);
+  assert.equal(noGuard.canListOnMarket, false);
+  assert.equal(noGuard.canBrowseInventory, true, 'browsing is still fine');
+});
+
+test('an email-Guard account can trade, and the hold is surfaced', () => {
+  const email = caps({ guardKind: GuardKind.Email });
+  assert.equal(email.canSendTrades, true);
+  assert.equal(email.canRespondToTrades, true);
+  assert.equal(email.holdDays, 15);
+  assert.equal(email.canListOnMarket, false, 'still needs identity_secret to confirm a listing');
+});
+
+test('a shared_secret always means mobile, whatever was stored', () => {
+  assert.equal(normaliseGuardKind(GuardKind.None, 'abc='), GuardKind.Mobile);
+  assert.equal(caps({ sharedSecret: 'abc=', guardKind: GuardKind.None }).guardKind, GuardKind.Mobile);
+});
+
+test('an unset level stays unknown rather than pretending to know', () => {
+  assert.equal(normaliseGuardKind(undefined, ''), GuardKind.Unknown);
+  assert.equal(describeGuardKind(GuardKind.Unknown).short, 'Guard unknown');
+  // Unknown must not block the user before Steam has been asked.
+  assert.equal(caps({ guardKind: GuardKind.Unknown }).canSendTrades, true);
+});
+
+test('the chosen level survives export and import', () => {
+  const account = normaliseMaFile({ account_name: 'plain', guard_kind: GuardKind.Email },
+    { requireSharedSecret: false });
+  assert.equal(account.guardKind, GuardKind.Email);
+  const back = normaliseMaFile(JSON.parse(serialiseMaFile(accountToMaFile(account))),
+    { requireSharedSecret: false });
+  assert.equal(back.guardKind, GuardKind.Email);
+});

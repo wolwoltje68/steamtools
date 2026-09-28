@@ -119,6 +119,8 @@ export function normaliseMaFile(raw, { sourceName, requireSharedSecret = true } 
 
     // Our extensions.
     password: firstString(raw.password, raw.Password) || null,
+    // An expectation until Steam confirms it at sign-in.
+    guardKind: normaliseGuardKind(raw.guard_kind || raw.guardKind, sharedSecret),
 
     // Live session state; never trusted from an import, only carried forward.
     sessionId: firstString(session.SessionID, session.sessionid) || null,
@@ -142,18 +144,87 @@ export function normaliseMaFile(raw, { sourceName, requireSharedSecret = true } 
 export function accountCapabilities(account) {
   const hasAuthenticator = !!account?.sharedSecret;
   const canConfirm = !!account?.identitySecret;
+  const guardKind = hasAuthenticator ? GuardKind.Mobile : account?.guardKind || GuardKind.Unknown;
+  const limits = tradingLimits(guardKind);
+
   return {
+    guardKind,
     hasAuthenticator,
     canGenerateCodes: hasAuthenticator,
     canConfirm,
-    // Everything below works without an authenticator.
     canBrowseInventory: true,
     canReadTrades: true,
-    canRespondToTrades: true,
-    canSendTrades: true,
-    // Market listings always need a confirmation, so they need identity_secret.
-    canListOnMarket: canConfirm,
+    // Steam's own rule: no Guard at all means no trading and no market.
+    canRespondToTrades: limits.canTrade,
+    canSendTrades: limits.canTrade,
+    // A market listing needs both Steam's permission and a confirmation.
+    canListOnMarket: canConfirm && limits.canUseMarket,
+    holdDays: limits.holdDays,
+    limitsSummary: limits.summary,
   };
+}
+
+/**
+ * Which Steam Guard an account uses. Steam is authoritative here and says so at
+ * sign-in, so a stored value is only ever an expectation until then - see
+ * guardTypeFromSteam() in steam/session.js, which corrects it.
+ */
+export const GuardKind = {
+  Mobile: 'mobile',
+  Email: 'email',
+  None: 'none',
+  Unknown: 'unknown',
+};
+
+export const GUARD_KIND_OPTIONS = [
+  {
+    kind: GuardKind.Mobile,
+    label: 'Mobile authenticator',
+    short: 'Mobile Guard',
+    hint: 'Has a maFile. Codes and confirmations work, trades complete immediately.',
+  },
+  {
+    kind: GuardKind.Email,
+    label: 'Steam email Guard',
+    short: 'Email Guard',
+    hint: 'Steam emails a code at sign-in. Trades work, but Steam holds them for up to 15 days.',
+  },
+  {
+    kind: GuardKind.None,
+    label: 'No Steam Guard',
+    short: 'No Guard',
+    hint: 'Steam blocks trading and the Community Market entirely for these accounts.',
+  },
+];
+
+export function describeGuardKind(kind) {
+  return GUARD_KIND_OPTIONS.find((option) => option.kind === kind) || {
+    kind: GuardKind.Unknown,
+    label: 'Guard type unknown',
+    short: 'Guard unknown',
+    hint: 'This will be filled in the first time the account signs in.',
+  };
+}
+
+/**
+ * What Steam itself allows for a Guard level. These are Steam's rules, not the
+ * app's, and the app cannot work around them - so it states them instead.
+ */
+export function tradingLimits(kind) {
+  switch (kind) {
+    case GuardKind.Mobile:
+      return { canTrade: true, canUseMarket: true, holdDays: 0,
+        summary: 'Trades and market sales complete immediately.' };
+    case GuardKind.Email:
+      return { canTrade: true, canUseMarket: true, holdDays: 15,
+        summary: 'Steam holds trades for up to 15 days, and the email Guard must have been on for 15 days.' };
+    case GuardKind.None:
+      return { canTrade: false, canUseMarket: false, holdDays: 0,
+        summary: 'Steam blocks trading and the Community Market until Steam Guard is enabled.' };
+    default:
+      return { canTrade: true, canUseMarket: true, holdDays: null,
+        summary: 'Steam will report the Guard level at the first sign-in.' };
+  }
 }
 
 export const DEFAULT_AUTOMATION = {
@@ -167,6 +238,13 @@ export const DEFAULT_AUTOMATION = {
   declineOthers: false,
   notify: true,
 };
+
+/** A stored account that has a shared_secret plainly uses the authenticator. */
+export function normaliseGuardKind(value, sharedSecret) {
+  const known = Object.values(GuardKind).includes(value) ? value : null;
+  if (sharedSecret) return GuardKind.Mobile;
+  return known && known !== GuardKind.Mobile ? known : GuardKind.Unknown;
+}
 
 export function normaliseAutomation(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
@@ -247,6 +325,10 @@ export function accountToMaFile(account, { includePassword = true, includeSessio
     automation: account.automation || DEFAULT_AUTOMATION,
     added_at: account.addedAt || Math.floor(Date.now() / 1000),
   };
+
+  if (account.guardKind && account.guardKind !== GuardKind.Unknown) {
+    maFile.guard_kind = account.guardKind;
+  }
 
   // The user asked for the password to travel with the maFile when there is one.
   if (includePassword && account.password) maFile.password = account.password;

@@ -122,27 +122,28 @@ the device. There is no recovery for it.
 Then either import maFiles (Accounts → Add → Choose files) or add an account by
 hand with its `shared_secret` and `identity_secret`.
 
-### Accounts without a mobile authenticator
+### All three Steam Guard levels
 
-An account with no maFile can still be added: turn on **No mobile
-authenticator** when adding it by hand. It works for browsing inventories,
-reading trade offers, and accepting, declining or sending trades. Steam emails a
-Guard code at sign-in and the app prompts for it.
+When adding an account by hand you pick which Guard it uses, and the app adapts:
 
-What it cannot do, and why:
+| Level | Codes | Confirmations | Trading | Market |
+|---|---|---|---|---|
+| **Mobile authenticator** (maFile) | generated in-app | yes | immediate | yes |
+| **Steam email Guard** | Steam emails one, the app prompts | no | works, but Steam holds trades up to 15 days | listing needs a confirmation, so no |
+| **No Steam Guard** | none needed | no | **blocked by Steam** | **blocked by Steam** |
 
-| | |
-|---|---|
-| Steam Guard codes | needs `shared_secret`, which only the authenticator has |
-| Mobile confirmations | needs `identity_secret`, same reason |
-| Market listings | every listing requires a confirmation |
-| Unattended automation | nobody can read the emailed code, so it fails with a clear message rather than stalling |
+The bottom two rows are Steam's rules, not the app's, and nothing here can work
+around them. So the app states them when you pick a level, badges each account
+with its level and hold, and withholds the trade and market actions Steam would
+refuse anyway - rather than offering a button that fails later.
 
-Steam's own rules bite harder than the app's: an account with **no Steam Guard
-at all cannot trade or use the Community Market**, and one with **email Guard
-only puts every trade into a multi-day hold**. Only the mobile authenticator,
-active for a week, lifts that. The app states this when you add such an account
-rather than letting a trade fail confusingly later.
+**The choice is only an expectation.** Steam declares the real Guard level in
+its reply to the first sign-in, and the app stores that instead, so picking the
+wrong one corrects itself. An account holding a `shared_secret` always counts as
+mobile regardless of what was picked.
+
+Unattended automation needs the mobile authenticator: nobody is there to read an
+emailed code, so it fails with a clear message rather than stalling.
 
 An imported *maFile* without a `shared_secret` is still rejected, because
 holding that secret is the file's whole purpose - such a file is corrupt, not
@@ -176,7 +177,7 @@ to a fake Steam.
 
 | Command | What it does | Where it runs |
 |---|---|---|
-| `npm test` | 109 unit + integration tests | any OS |
+| `npm test` | 117 unit + integration tests | any OS |
 | `npm run lint` | ESLint over app and scripts | any OS |
 | `npm run verify:platforms` | bundles for Android, iOS and web and checks each output | any OS |
 | `npm run ui-smoke` | drives every screen in a browser against a fake Steam, saves screenshots | any OS with Chromium |
@@ -270,7 +271,7 @@ and compiles native debug builds for Android (Ubuntu) and iOS (macOS).
 ## Development
 
 ```bash
-npm test                              # 109 tests
+npm test                              # 117 tests
 npm run lint
 npm run verify:platforms              # android + ios + web bundles
 npm run ui-smoke                      # screens + screenshots

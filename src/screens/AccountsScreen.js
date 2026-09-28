@@ -4,7 +4,7 @@ import { Alert, Modal, RefreshControl, StyleSheet, Text, View } from 'react-nati
 
 import { useApp } from '../state/AppContext.js';
 import { needsRenewal } from '../steam/session.js';
-import { accountCapabilities } from '../steam/maFile.js';
+import { accountCapabilities, describeGuardKind, GuardKind } from '../steam/maFile.js';
 import { Banner, Button, Card, EmptyState, Field, Input, Pill, Screen, SectionHeader } from '../ui/components.js';
 import { colors, spacing, typography } from '../ui/theme.js';
 
@@ -114,6 +114,7 @@ export default function AccountsScreen({ navigation }) {
 
       {accounts.map((account) => {
         const signedIn = !!account.accessToken && !needsRenewal(account);
+        const capabilities = accountCapabilities(account);
         return (
           <Card key={account.id}>
             <View style={styles.row}>
@@ -133,9 +134,17 @@ export default function AccountsScreen({ navigation }) {
 
             <View style={styles.badges}>
               {account.password ? <Pill label="Password saved" tone="accent" /> : null}
-              {accountCapabilities(account).hasAuthenticator ? null : (
-                <Pill label="No authenticator" tone="warning" />
-              )}
+              <Pill
+                label={describeGuardKind(capabilities.guardKind).short}
+                tone={
+                  capabilities.guardKind === GuardKind.Mobile
+                    ? 'success'
+                    : capabilities.guardKind === GuardKind.None
+                      ? 'danger'
+                      : 'warning'
+                }
+              />
+              {capabilities.holdDays ? <Pill label={`${capabilities.holdDays}-day hold`} tone="warning" /> : null}
               {account.sharedSecret && !account.identitySecret ? (
                 <Pill label="No identity_secret" tone="warning" />
               ) : null}
@@ -143,6 +152,10 @@ export default function AccountsScreen({ navigation }) {
                 <Pill label={automationRunning ? 'Automation on' : 'Automation idle'} tone="success" />
               ) : null}
             </View>
+
+            {capabilities.canTrade === false || !capabilities.canSendTrades ? (
+              <Text style={styles.limitNote}>{capabilities.limitsSummary}</Text>
+            ) : null}
 
             <View style={styles.actions}>
               <Button
@@ -216,6 +229,7 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   action: { flex: 1 },
   remove: { marginTop: spacing.sm, borderColor: 'transparent' },
+  limitNote: { ...typography.caption, color: colors.warning, marginTop: spacing.sm, lineHeight: 17 },
   modalBackdrop: {
     flex: 1,
     backgroundColor: colors.overlay,

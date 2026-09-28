@@ -146,6 +146,39 @@ export function ToggleRow({ label, description, value, onValueChange, disabled }
   );
 }
 
+/** Vertical choice list: one option per row, with room for a line of context. */
+export function Segmented({ options, value, onChange }) {
+  return (
+    <View style={styles.segmented}>
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={option.label}
+            onPress={() => onChange(option.value)}
+            style={({ pressed }) => [
+              styles.segment,
+              active && styles.segmentActive,
+              pressed && styles.pressed,
+            ]}
+          >
+            <View style={[styles.radio, active && styles.radioActive]}>
+              {active ? <View style={styles.radioDot} /> : null}
+            </View>
+            <View style={styles.segmentText}>
+              <Text style={[typography.body, active && styles.segmentLabelActive]}>{option.label}</Text>
+              {option.hint ? <Text style={styles.segmentHint}>{option.hint}</Text> : null}
+            </View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export function Banner({ kind = 'info', message, onDismiss }) {
   if (!message) return null;
   const tone = {
@@ -262,6 +295,33 @@ const styles = StyleSheet.create({
   toggleDisabled: { opacity: 0.45 },
   toggleText: { flex: 1, gap: 2 },
   toggleDescription: { color: colors.textMuted, fontSize: 12, lineHeight: 16 },
+  segmented: { gap: spacing.xs, marginBottom: spacing.md },
+  segment: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  segmentActive: { borderColor: colors.accent, backgroundColor: colors.surfaceRaised },
+  segmentText: { flex: 1, gap: 2 },
+  segmentLabelActive: { color: colors.accent, fontWeight: '700' },
+  segmentHint: { ...typography.caption, lineHeight: 17 },
+  radio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  radioActive: { borderColor: colors.accent },
+  radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',

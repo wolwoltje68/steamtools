@@ -184,6 +184,9 @@ export function AppProvider({ children }) {
         accessTokenExpires: result.accessTokenExpires,
         sessionId: result.sessionId,
         deviceId: account.deviceId || getDeviceId(account.steamId || result.steamId),
+        // Steam just told us which Guard this account really uses; trust that
+        // over whatever was picked when the account was added.
+        guardKind: account.sharedSecret ? 'mobile' : result.guardKind || account.guardKind,
       };
       await updateAccount(id, patch);
       return { ...account, ...patch };

@@ -174,9 +174,17 @@ async function main() {
     step('add an account with no authenticator');
     await tab('Accounts').click();
     await page.getByText('Add', { exact: true }).click();
-    await page.getByText('No mobile authenticator').waitFor({ timeout: 15000 });
-    await page.getByText('No mobile authenticator').click();
+    await page.getByText('Mobile authenticator').waitFor({ timeout: 15000 });
+    // All three Guard levels must be offered as an explicit choice.
+    for (const label of ['Mobile authenticator', 'Steam email Guard', 'No Steam Guard']) {
+      if ((await page.getByText(label, { exact: true }).count()) === 0) {
+        fail(`the Guard level "${label}" is not offered when adding an account`);
+      }
+    }
+    await page.getByText('Steam email Guard', { exact: true }).click();
     await page.waitForTimeout(300);
+    // Steam's hold must be stated before the account is even added.
+    await page.getByText(/holds trades for up to 15 days/).waitFor({ timeout: 10000 });
     // The secret fields must disappear: they are meaningless for this account.
     if (await page.locator('input[placeholder="base64=="]').count()) {
       fail('shared_secret / identity_secret fields are still shown for an account with no authenticator');
@@ -186,8 +194,10 @@ async function main() {
     await shot('03b-no-authenticator');
     await page.getByRole('button', { name: 'Add account' }).click();
     await page.getByText('plain_account').first().waitFor({ timeout: 20000 });
-    await page.getByText('No authenticator').first().waitFor({ timeout: 10000 });
-    ok('added and badged');
+    await page.getByText('Email Guard').first().waitFor({ timeout: 10000 });
+    await page.getByText('15-day hold').first().waitFor({ timeout: 10000 });
+    await shot('04b-guard-levels');
+    ok('added, badged Email Guard with its hold');
 
     step('the Guard tab explains rather than erroring');
     await tab('Steam Guard').click();

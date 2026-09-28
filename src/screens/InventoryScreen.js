@@ -6,6 +6,7 @@ import { FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } fr
 import { useApp } from '../state/AppContext.js';
 import { appById, getInventory } from '../steam/inventory.js';
 import { resolveProfile } from '../steam/profile.js';
+import { accountCapabilities } from '../steam/maFile.js';
 import { AccountPicker } from '../ui/AccountPicker.js';
 import { AppPicker } from '../ui/AppPicker.js';
 import { Banner, Button, EmptyState, Input, Loading, Pill, Screen } from '../ui/components.js';
@@ -31,6 +32,7 @@ export default function InventoryScreen({ navigation }) {
   const [resolving, setResolving] = useState(false);
 
   const viewingOther = owner !== null;
+  const capabilities = accountCapabilities(activeAccount);
   const ownerSteamId = owner?.steamId || activeAccount?.steamId || null;
 
   const load = useCallback(async () => {
@@ -231,6 +233,10 @@ export default function InventoryScreen({ navigation }) {
               />
             ) : null}
 
+            {!viewingOther && !capabilities.canSendTrades ? (
+              <Banner kind="warning" message={capabilities.limitsSummary} />
+            ) : null}
+
             <Input
               value={search}
               onChangeText={setSearch}
@@ -277,7 +283,7 @@ export default function InventoryScreen({ navigation }) {
         }
       />
 
-      {selectedItems.length > 0 && !viewingOther ? (
+      {selectedItems.length > 0 && !viewingOther && capabilities.canSendTrades ? (
         <View style={styles.actionBar}>
           <View style={styles.actionSummary}>
             <Text style={typography.heading}>{selectedItems.length} selected</Text>
@@ -298,6 +304,7 @@ export default function InventoryScreen({ navigation }) {
               title="Sell"
               icon="🏷"
               variant="secondary"
+              disabled={!capabilities.canListOnMarket}
               onPress={() => navigation.navigate('MarketSell', { items: selectedItems })}
               style={styles.actionButton}
             />

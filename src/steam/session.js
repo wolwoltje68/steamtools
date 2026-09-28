@@ -20,6 +20,19 @@ export const GuardType = {
   MachineToken: 5,
 };
 
+/**
+ * Translate what Steam says it wants into the app's Guard vocabulary. Steam is
+ * the authority here, so this is what gets stored - never the user's guess.
+ */
+export function guardKindFromSteam(confirmationTypes) {
+  const types = (confirmationTypes || []).map(Number);
+  if (types.includes(GuardType.DeviceCode) || types.includes(GuardType.DeviceConfirmation)) return 'mobile';
+  if (types.includes(GuardType.EmailCode) || types.includes(GuardType.EmailConfirmation)) return 'email';
+  // Steam listing no confirmation at all means the account has no Guard.
+  if (types.length === 0 || types.every((type) => type === GuardType.None)) return 'none';
+  return 'unknown';
+}
+
 const WEBSITE_ID = 'Community';
 const PLATFORM_WEB_BROWSER = 2;
 
@@ -107,6 +120,7 @@ export async function login({ accountName, password, sharedSecret, onGuardRequir
   }
 
   const guardTypes = (session.allowed_confirmations || []).map((c) => Number(c.confirmation_type));
+  const guardKind = guardKindFromSteam(guardTypes);
   const needsDeviceCode = guardTypes.includes(GuardType.DeviceCode);
   const needsEmailCode = guardTypes.includes(GuardType.EmailCode);
   const needsApproval = guardTypes.includes(GuardType.DeviceConfirmation) || guardTypes.includes(GuardType.EmailConfirmation);
@@ -159,6 +173,8 @@ export async function login({ accountName, password, sharedSecret, onGuardRequir
     accessToken,
     accessTokenExpires: decodeJwtExpiry(accessToken),
     sessionId: newSessionId(),
+    // What Steam actually asked for, which may differ from what the user chose.
+    guardKind,
   };
 }
 

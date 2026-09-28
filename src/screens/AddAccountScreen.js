@@ -6,6 +6,9 @@ import * as FileSystem from 'expo-file-system';
 
 import { useApp } from '../state/AppContext.js';
 import {
+  GuardKind,
+  GUARD_KIND_OPTIONS,
+  tradingLimits,
   decryptExport,
   decryptSdaMaFile,
   inspectExport,
@@ -14,7 +17,7 @@ import {
   parseJsonPreservingSteamIds,
   parseMaFileText,
 } from '../steam/maFile.js';
-import { Banner, Button, Card, Field, Input, Screen, SectionHeader, ToggleRow } from '../ui/components.js';
+import { Banner, Button, Card, Field, Input, Screen, SectionHeader, Segmented } from '../ui/components.js';
 import { spacing, typography } from '../ui/theme.js';
 
 export default function AddAccountScreen({ navigation }) {
@@ -32,9 +35,10 @@ export default function AddAccountScreen({ navigation }) {
     identitySecret: '',
     password: '',
   });
-  // Accounts without the Steam mobile authenticator are legitimate; they just
-  // cannot generate codes or approve confirmations.
-  const [noAuthenticator, setNoAuthenticator] = useState(false);
+  // Which Steam Guard this account uses. Only an expectation: Steam reports the
+  // real level at the first sign-in and the app corrects it then.
+  const [guardKind, setGuardKind] = useState(GuardKind.Mobile);
+  const noAuthenticator = guardKind !== GuardKind.Mobile;
 
   async function readFiles() {
     const result = await DocumentPicker.getDocumentAsync({
@@ -184,8 +188,10 @@ export default function AddAccountScreen({ navigation }) {
         },
         { requireSharedSecret: !noAuthenticator }
       );
+      account.guardKind = guardKind;
       await addAccounts([account]);
       setManual({ accountName: '', steamId: '', sharedSecret: '', identitySecret: '', password: '' });
+      setGuardKind(GuardKind.Mobile);
       setNotice(`Added ${account.accountName}.`);
       navigation.goBack();
     } catch (err) {
@@ -230,21 +236,22 @@ export default function AddAccountScreen({ navigation }) {
 
       <SectionHeader title="Add manually" />
       <Card>
-        <ToggleRow
-          label="No mobile authenticator"
-          description="For an account that has no maFile. It can browse inventories and handle trade offers, but cannot generate Steam Guard codes or approve confirmations."
-          value={noAuthenticator}
-          onValueChange={setNoAuthenticator}
-        />
+        <Field label="Steam Guard on this account">
+          <Segmented
+            value={guardKind}
+            onChange={setGuardKind}
+            options={GUARD_KIND_OPTIONS.map((option) => ({
+              value: option.kind,
+              label: option.label,
+              hint: option.hint,
+            }))}
+          />
+        </Field>
 
         {noAuthenticator ? (
           <Banner
-            kind="info"
-            message={
-              'Steam itself limits these accounts: with no Steam Guard at all an account cannot trade or use the ' +
-              'Community Market, and with email Guard only, trades are held for several days. Steam will email a ' +
-              'code each time this app signs in.'
-            }
+            kind={guardKind === GuardKind.None ? 'warning' : 'info'}
+            message={`${tradingLimits(guardKind).summary} These are Steam's rules, not this app's. The app checks the real level when the account first signs in and corrects this if it differs.`}
           />
         ) : null}
 
