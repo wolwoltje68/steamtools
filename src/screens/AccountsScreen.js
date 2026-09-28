@@ -155,7 +155,7 @@ export default function AccountsScreen({ navigation }) {
 
             {capabilities.canSendTrades ? null : (
               <Text style={styles.limitNote}>{capabilities.limitsSummary}</Text>
-            ) : null}
+            )}
 
             <View style={styles.actions}>
               <Button
